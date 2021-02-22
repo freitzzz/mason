@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:args/command_runner.dart';
@@ -26,14 +27,6 @@ class BrickNotFoundException extends MasonException {
 class MasonYamlNameMismatch extends MasonException {
   /// {@macro mason_yaml_name_mismatch}
   MasonYamlNameMismatch(String message) : super(message);
-}
-
-/// {@template mason_yaml_not_found_exception}
-/// Thrown when a `mason.yaml` cannot be found locally.
-/// {@endtemplate}
-class MasonYamlNotFoundException extends MasonException {
-  /// {@macro mason_yaml_not_found_exception}
-  const MasonYamlNotFoundException(String message) : super(message);
 }
 
 /// {@template mason_yaml_parse_exception}
@@ -69,11 +62,10 @@ abstract class MasonCommand extends Command<int> {
     if (_entryPoint != null) return _entryPoint;
     final nearestMasonYaml = MasonYaml.findNearest(cwd);
     if (nearestMasonYaml == null) {
-      throw const MasonYamlNotFoundException(
-        'Could not find ${MasonYaml.file}.\nDid you forget to run mason init?',
-      );
+      return _entryPoint = Directory(p.join(masonCacheDir(), 'global'))
+        ..createSync(recursive: true);
     }
-    return nearestMasonYaml.parent;
+    return _entryPoint = nearestMasonYaml.parent;
   }
 
   Directory _entryPoint;
@@ -120,11 +112,12 @@ abstract class MasonCommand extends Command<int> {
 
   Set<BrickYaml> _bricks;
 
-  /// Returns `true` if a `mason.yaml` file exists.
-  bool get masonInitialized {
+  /// Returns `true` if a `mason.yaml` file exists locally.
+  /// This excludes the global mason configuration.
+  bool get masonInitializedLocally {
     try {
-      final _ = masonYamlFile;
-      return true;
+      final file = masonYamlFile;
+      return p.isWithin(cwd.path, file.path);
     } catch (_) {
       return false;
     }
@@ -134,9 +127,9 @@ abstract class MasonCommand extends Command<int> {
   File get masonYamlFile {
     final file = File(p.join(entryPoint.path, MasonYaml.file));
     if (!file.existsSync()) {
-      throw const MasonYamlNotFoundException(
-        'Cannot find ${MasonYaml.file}.\nDid you forget to run mason init?',
-      );
+      file
+        ..createSync(recursive: true)
+        ..writeAsStringSync(json.encode(MasonYaml.empty.toJson()));
     }
     return file;
   }
@@ -146,11 +139,10 @@ abstract class MasonCommand extends Command<int> {
     if (_masonYaml != null) return _masonYaml;
     final masonYamlContent = masonYamlFile.readAsStringSync();
     try {
-      _masonYaml = checkedYamlDecode(
+      return _masonYaml = checkedYamlDecode(
         masonYamlContent,
         (m) => MasonYaml.fromJson(m),
       );
-      return _masonYaml;
     } on ParsedYamlException catch (e) {
       throw MasonYamlParseException(
         'Malformed ${MasonYaml.file} at ${masonYamlFile.path}\n${e.message}',

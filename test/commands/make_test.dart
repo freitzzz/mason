@@ -55,14 +55,15 @@ void main() {
       )).called(1);
     });
 
-    test('exits with code 64 when mason.yaml does not exist', () async {
+    test('exits with code 64 when brick does not exist and no mason.yaml)',
+        () async {
       File(path.join(Directory.current.path, 'mason.yaml'))
           .deleteSync(recursive: true);
       commandRunner = MasonCommandRunner(logger: logger);
       final result = await commandRunner.run(['make', 'garbage']);
       expect(result, equals(ExitCode.usage.code));
       verify(logger.err(
-        'Could not find mason.yaml.\nDid you forget to run mason init?',
+        'Could not find a subcommand named "garbage" for "mason make".',
       )).called(1);
     });
 
